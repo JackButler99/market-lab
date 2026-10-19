@@ -1,0 +1,16 @@
+HTTP/1.1 200 OK
+Server: myracloud
+Date: Mon, 19 Oct 2026 15:39:25 GMT
+Content-Type: application/vnd.ecb.data+csv;version=1.0.0
+Transfer-Encoding: chunked
+Connection: keep-alive
+Cache-Control: max-age=30
+Content-Disposition: attachment;filename=data.csv
+Last-Modified: Sun, 18 Oct 2026 23:37:36 GMT
+Strict-Transport-Security: max-age=31536000 ; includeSubDomains
+Vary: accept
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+X-Xss-Protection: 0
+Expires: Mon, 19 Oct 2026 15:39:55 GMT
+

@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+/* Shared palette. Component spacing, typography and states live in TSX. */
+@theme {
+  --color-canvas: #10161c;
+  --color-surface: #151e26;
+  --color-elevated: #1b2630;
+  --color-line: #2c3741;
+  --color-ink: #e9edf1;
+  --color-muted: #95a5b2;
+  --color-accent: #b9f275;
+  --color-forecast: #a8b6ff;
+  --font-sans: Arial, Helvetica, sans-serif;
+}

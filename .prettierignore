@@ -1,0 +1,7 @@
+**/node_modules/**
+**/.next/**
+**/data/**
+**/__pycache__/**
+**/migration-baseline/**
+**/package-lock.json
+*.patch
