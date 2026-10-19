@@ -1,4 +1,5 @@
 "use client";
+import { API_BASE } from "./api-base";
 import { useEffect, useState } from "react";
 import FundamentalChart, { type FundamentalVisual } from "./fundamental-chart";
 import FundamentalFormula from "./fundamental-formula";
@@ -63,7 +64,7 @@ const displayValue = (value: number | null) =>
         maximumFractionDigits: 2,
       }).format(value);
 const displayUnit = (unit: string) => (unit === "percentage points" ? "poin persentase" : unit);
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = API_BASE;
 const LEVELS: [ReadingLevel, string, string][] = [
   ["beginner", "Beginner", "Arti angka dengan bahasa sederhana"],
   ["intermediate", "Intermediate", "Hubungan metrik dan pertanyaan lanjutan"],

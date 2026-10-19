@@ -1,4 +1,5 @@
 "use client";
+import { API_BASE } from "./api-base";
 import { useEffect, useState } from "react";
 import FundamentalAutomation from "./fundamental-automation";
 import { Pill } from "./ui";
@@ -22,7 +23,7 @@ type Status = {
   last_error: string | null;
   states: State[];
 };
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = API_BASE;
 const date = (value: string | null) => (value ? new Date(value).toLocaleString() : "—");
 export default function AutomationStatus({ symbol }: { symbol: string }) {
   const [status, setStatus] = useState<Status | null>(null);

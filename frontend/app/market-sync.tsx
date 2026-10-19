@@ -1,4 +1,5 @@
 "use client";
+import { PUBLIC_READ_ONLY } from "./api-base";
 import { Button, Panel, Pill } from "./ui";
 import AutomationStatus from "./automation-status";
 export type DatasetAsset = {
@@ -52,7 +53,11 @@ export default function MarketSync({
               : "API connector is available for AAPL, MSFT, EURUSD and BTCUSD. CSV import remains available for this asset."}
           </p>
         </div>
-        <Button variant="primary" disabled={busy || !supported} onClick={onSync}>
+        <Button
+          variant="primary"
+          disabled={PUBLIC_READ_ONLY || busy || !supported}
+          onClick={onSync}
+        >
           {busy ? "Processing…" : "↻ Sync market data"}
         </Button>
       </div>

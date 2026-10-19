@@ -1,4 +1,5 @@
 "use client";
+import { API_BASE, PUBLIC_READ_ONLY } from "./api-base";
 import { useEffect, useState } from "react";
 import FundamentalInsights from "./fundamental-insights";
 import { MetricHelp } from "./fundamental-glossary";
@@ -28,7 +29,7 @@ type Payload = {
   analysis: null | { title: string; metrics: Record<string, Metric>; limitations: string[] };
   last_job?: { status: string; message: string } | null;
 };
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = API_BASE;
 function number(value: number | null) {
   return value == null
     ? "Unavailable"
@@ -125,8 +126,12 @@ export default function CrossFundamentalAnalysis({ symbol }: { symbol: "EURUSD" 
           </div>
           <Pill>{data?.has_data ? "Evidence stored" : "Not synced"}</Pill>
         </div>
-        <Button className="mt-5" disabled={busy || loading} onClick={sync}>
-          {busy ? "Fetching evidence…" : "Sync fundamentals"}
+        <Button className="mt-5" disabled={PUBLIC_READ_ONLY || busy || loading} onClick={sync}>
+          {PUBLIC_READ_ONLY
+            ? "Auto-update / read-only demo"
+            : busy
+              ? "Fetching evidence…"
+              : "Sync fundamentals"}
         </Button>
         <p className="mt-3 text-xs leading-6 text-muted">
           Six-hour cache · shared 45-second sync cooldown · automatic refresh while the Python

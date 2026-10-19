@@ -4,9 +4,11 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 import csv, io, json, math, random, sqlite3, statistics, datetime, urllib.parse
 import threading
+from contextlib import contextmanager
 
 from dotenv import load_dotenv
 import datasets
+import deploy_config
 import market_data
 import automation
 import fundamentals
@@ -18,8 +20,9 @@ DATA_LOCK = threading.Lock()
 AUTOMATION = None
 FUNDAMENTALS_AUTOMATION = None
 
-DB = Path(__file__).parent / "data" / "research.sqlite3"
-DB.parent.mkdir(exist_ok=True)
+DB = deploy_config.database_path()
+if not deploy_config.production():
+    DB.parent.mkdir(parents=True, exist_ok=True)
 ASSETS = {
     "AAPL": ("Apple", "Equity", 210),
     "MSFT": ("Microsoft", "Equity", 430),
@@ -28,14 +31,20 @@ ASSETS = {
 }
 
 
+@contextmanager
 def conn():
     c = sqlite3.connect(DB, timeout=30)
     c.row_factory = sqlite3.Row
-    return c
+    try:
+        with c:
+            yield c
+    finally:
+        c.close()
 
 
 def init():
     with conn() as c:
+        c.execute("PRAGMA journal_mode=WAL")
         c.executescript(
             (
                 "CREATE TABLE IF NOT EXISTS prices(symbol TEXT,date TEXT,close REAL,source "
@@ -256,21 +265,15 @@ def sync_market(symbol):
         DATA_LOCK.release()
 
 
-class Handler(BaseHTTPRequestHandler):
-    def send(self, code, data):
-        body = json.dumps(data, allow_nan=False).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "http://localhost:3000")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.end_headers()
-        self.wfile.write(body)
+class APIActions:
+    """Routes shared by the local HTTP server and the production WSGI adapter."""
 
     def do_OPTIONS(self):
         self.send(200, {})
 
     def do_GET(self):
+        if not deploy_config.authorized(self.headers, self.path):
+            return self.send(401, {"error": "API authorization required"})
         path = urllib.parse.urlparse(self.path)
         q = urllib.parse.parse_qs(path.query)
         try:
@@ -404,6 +407,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send(400, {"error": str(e)})
 
     def do_POST(self):
+        if not deploy_config.authorized(self.headers, self.path):
+            return self.send(401, {"error": "API authorization required"})
         try:
             size = int(self.headers.get("Content-Length", 0))
             if size < 1 or size > 2_000_000:
@@ -460,9 +465,24 @@ class Handler(BaseHTTPRequestHandler):
             )
 
 
+class Handler(APIActions, BaseHTTPRequestHandler):
+    def send(self, code, data):
+        body = json.dumps(data, allow_nan=False).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Cache-Control", "no-store")
+        for key, value in deploy_config.cors(self.headers.get("Origin", "")).items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(body)
+
+
 if __name__ == "__main__":
+    if deploy_config.production():
+        raise SystemExit("Production must use python serve.py (Waitress WSGI)")
+    host, port = deploy_config.validate()
     # Bind before starting the scheduler so a second server cannot start a second worker.
-    http = ThreadingHTTPServer(("127.0.0.1", 8000), Handler)
+    http = ThreadingHTTPServer((host, port), Handler)
     init()
     AUTOMATION = automation.Runner(conn, sync_market, experiment, save_experiment)
     AUTOMATION.start()
@@ -470,7 +490,7 @@ if __name__ == "__main__":
         conn, symbols=["AAPL", "MSFT", "EURUSD", "BTCUSD"], credential=cross_fundamentals.credential
     )
     FUNDAMENTALS_AUTOMATION.start()
-    print("Research API: http://localhost:8000 — backend automation configured", flush=True)
+    print(f"Research API: http://{host}:{port} — backend automation configured", flush=True)
     try:
         http.serve_forever()
     except KeyboardInterrupt:

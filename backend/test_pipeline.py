@@ -1,6 +1,7 @@
 """Offline regression tests. No live provider calls or credentials required."""
 
 import datetime as dt
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -56,7 +57,7 @@ class PipelineTests(unittest.TestCase):
 
     def test_additive_migration_preserves_existing_run(self):
         server.DB = Path(self.temp.name) / "legacy.sqlite3"
-        with sqlite3.connect(server.DB) as c:
+        with closing(sqlite3.connect(server.DB)) as c, c:
             c.executescript(
                 "CREATE TABLE prices(symbol TEXT,date TEXT,close REAL,source TEXT,PRIMARY KEY(symbol,date));"
                 "CREATE TABLE runs(id INTEGER PRIMARY KEY,created TEXT,symbol TEXT,model TEXT,horizon INTEGER,mae REAL,baseline_mae REAL,payload TEXT);"

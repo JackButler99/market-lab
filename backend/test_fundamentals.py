@@ -1,6 +1,7 @@
 """Deterministic SEC fixtures; no live requests or contact email required."""
 
 import copy
+from contextlib import contextmanager
 import datetime as dt
 import os
 import sqlite3
@@ -126,10 +127,15 @@ class StorageTests(unittest.TestCase):
         self.env.stop()
         self.tmp.cleanup()
 
+    @contextmanager
     def connect(self):
         c = sqlite3.connect(self.path)
         c.row_factory = sqlite3.Row
-        return c
+        try:
+            with c:
+                yield c
+        finally:
+            c.close()
 
     def fetch(self, url):
         return copy.deepcopy(fixtures()[0 if "companyfacts" in url else 1])

@@ -1,4 +1,5 @@
 "use client";
+import { API_BASE, PUBLIC_READ_ONLY } from "./api-base";
 import { useEffect, useState } from "react";
 import FundamentalAnalysis from "./research-fundamentals";
 import ResearchTutorial from "./research-tutorial";
@@ -42,9 +43,11 @@ type Result = {
   forecast: { date: string; predicted: number; lower: number; upper: number }[];
   backtest: { date: string; actual: number; predicted: number }[];
 };
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = API_BASE;
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: v < 10 ? 5 : 2 });
 async function request(path: string, body?: object) {
+  if (body && PUBLIC_READ_ONLY)
+    throw Error("Demo publik read-only; backend automation memperbarui data.");
   const r = await fetch(
     API + path,
     body
@@ -417,6 +420,16 @@ export default function Page() {
               {error}
             </div>
           )}
+          {PUBLIC_READ_ONLY && (
+            <div
+              role="status"
+              className="mb-4 rounded-lg border border-accent/30 bg-accent/5 p-4 text-xs leading-6 text-muted"
+            >
+              Demo publik read-only. Grafik, sumber, insight dan hasil tersimpan dapat dibaca.
+              Sinkronisasi berjalan otomatis di backend; import, sync manual dan eksperimen baru
+              tersedia di lingkungan admin/lokal.
+            </div>
+          )}
           {notice && (
             <div
               className="mb-4 rounded-md bg-[#25362b] px-4 py-3 text-xs text-[#c3e5bd]"
@@ -555,7 +568,7 @@ export default function Page() {
                     data-tour="run"
                     variant="primary"
                     className="group mt-6 w-full justify-between py-3"
-                    disabled={busy || !online || !points.length}
+                    disabled={PUBLIC_READ_ONLY || busy || !online || !points.length}
                     onClick={run}
                   >
                     {busy ? "Processing…" : "Run experiment"}
@@ -666,7 +679,7 @@ export default function Page() {
                         <td>
                           <Button
                             compact
-                            disabled={busy || !r.dataset_id}
+                            disabled={PUBLIC_READ_ONLY || busy || !r.dataset_id}
                             onClick={() => replay(r)}
                           >
                             Replay
@@ -753,7 +766,7 @@ export default function Page() {
                       file:text-ink focus-visible:outline-2 focus-visible:outline-accent
                     "
                     aria-label="Import CSV"
-                    disabled={busy}
+                    disabled={PUBLIC_READ_ONLY || busy}
                     type="file"
                     accept=".csv,text/csv"
                     onChange={(e) => {

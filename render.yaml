@@ -1,0 +1,37 @@
+# Paid backend + 1 GB persistent disk. Review Render's quoted cost before creating.
+services:
+  - type: web
+    name: market-lab-api
+    runtime: docker
+    plan: starter
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    numInstances: 1
+    healthCheckPath: /health
+    disk:
+      name: market-lab-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: MARKET_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: DATABASE_PATH
+        value: /var/data/research.sqlite3
+      - key: API_ACCESS_TOKEN
+        generateValue: true
+      - key: ALPHAVANTAGE_API_KEY
+        sync: false
+      - key: FRED_API_KEY
+        sync: false
+      - key: SEC_USER_AGENT
+        sync: false
+      - key: AUTO_SYNC_ENABLED
+        value: "true"
+      - key: AUTO_FORECAST_ENABLED
+        value: "true"
+      - key: AUTO_FUNDAMENTALS_ENABLED
+        value: "true"

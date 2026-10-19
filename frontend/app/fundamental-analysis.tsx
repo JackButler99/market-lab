@@ -1,4 +1,5 @@
 "use client";
+import { API_BASE, PUBLIC_READ_ONLY } from "./api-base";
 
 import FundamentalInsights from "./fundamental-insights";
 import { MetricHelp } from "./fundamental-glossary";
@@ -41,7 +42,7 @@ type Payload = {
     formulas: Record<string, string>;
   };
 };
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API = API_BASE;
 const labels: Record<string, string> = {
   revenue: "Revenue",
   net_income: "Net income",
@@ -179,8 +180,12 @@ export default function FundamentalAnalysis() {
               <option>MSFT</option>
             </select>
           </label>
-          <Button onClick={sync} disabled={busy || loading}>
-            {busy ? "Fetching SEC reports…" : "Sync SEC reports"}
+          <Button onClick={sync} disabled={PUBLIC_READ_ONLY || busy || loading}>
+            {PUBLIC_READ_ONLY
+              ? "Auto-update / read-only demo"
+              : busy
+                ? "Fetching SEC reports…"
+                : "Sync SEC reports"}
           </Button>
         </div>
         <p className="mt-4 text-xs leading-6 text-muted">
