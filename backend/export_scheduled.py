@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import hashlib
 import os
+import re
 from pathlib import Path
 import tempfile
 import time
@@ -17,6 +18,35 @@ from email.message import Message
 
 UTC = dt.timezone.utc
 SYMBOLS = tuple(server.ASSETS)
+
+
+def diagnostic(error):
+    """Classify into fixed public labels; never return exception text or URLs."""
+    text = str(error).lower()
+    sources = ('ecb', 'us_rate', 'us_cpi', 'ea_hicp', 'hash-rate', 'difficulty', 'n-transactions', 'total-bitcoins')
+    source = next((name for name in sources if text.startswith(name + ':')), 'fundamentals')
+    if 'fred_api_key' in text:
+        return 'FRED configuration: repository secret FRED_API_KEY must be a valid 32-character key.'
+    status = re.search(r'provider returned http ([1-5][0-9]{2})\b', text)
+    if status:
+        return source + ': provider HTTP ' + status.group(1) + '; check access, key and provider limits.'
+    categories = (
+        ('certificate verification', 'TLS certificate verification failed'),
+        ('tls handshake', 'TLS handshake failed'),
+        ('timed out', 'connection/read timeout'),
+        ('dns lookup', 'DNS lookup failed'),
+        ('network connection', 'network connection failed'),
+        ('csv', 'ECB CSV schema/format mismatch'),
+        ('series identity', 'provider series identity mismatch'),
+        ('unit multiplier', 'provider unit multiplier mismatch'),
+        ('encoding or format', 'response encoding/format invalid'),
+        ('45 seconds', 'shared provider cooldown active'),
+        ('no observations', 'no stored observations'),
+    )
+    for fragment, label in categories:
+        if fragment in text:
+            return source + ': ' + label + '.'
+    return source + ': fetch or normalization failed; no raw exception published.'
 
 
 def read(route, **query):
@@ -101,16 +131,17 @@ def build(previous=None, live=True, pause=time.sleep):
             saved = fundamentals.cached(server.conn, symbol)
             if not saved.get('has_data'): raise ValueError('No observations')
             fund_status = 'updated'
-        except Exception:
+        except Exception as error:
+            failure = diagnostic(error)
             saved = copy.deepcopy(record.get('fundamentals', {}).get('saved')) or {
                 'symbol': symbol, 'supported': True, 'has_data': False,
                 'snapshot_id': None, 'fetched_at': None, 'analysis': None}
             saved['last_job'] = {'started': now, 'finished': now, 'status': 'failed',
-                'message': 'Scheduled provider fetch failed; saved analysis retained.'}
+                'message': failure + ' Saved analysis retained.'}
             fund_status = 'retained' if saved.get('has_data') else 'unavailable'
         record['fundamentals'] = fundamental_record(saved, symbol)
         fundamental_states.append({'symbol': symbol, 'status': fund_status,
-            'message': 'Scheduled evidence fetched.' if fund_status == 'updated' else 'Provider fetch failed; last successful observations retained if available.', 'next_attempt': None})
+            'message': 'Scheduled evidence fetched.' if fund_status == 'updated' else failure + ' Last successful observations retained if available.', 'next_attempt': None})
     runs = []
     for record in records.values():
         for forecast in record.get('forecasts', {}).values():
@@ -151,11 +182,14 @@ def main():
         content = ensure_public(bundle)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(content, encoding='utf-8')
-    print('Normalized snapshot prepared. Provider status:')
+    print('Normalized snapshot prepared. Price status:')
     for state in bundle['automation']['states']:
         print(state['symbol'], state['sync_status'])
+    print('Fundamental status:')
     for state in bundle['fundamental_automation']['states']:
         print(state['symbol'], state['status'])
+        if state['status'] != 'updated':
+            print('  Diagnostic:', state['message'])
 
 
 if __name__ == '__main__':

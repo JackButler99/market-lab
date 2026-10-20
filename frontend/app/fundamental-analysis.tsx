@@ -189,8 +189,9 @@ export default function FundamentalAnalysis() {
           </Button>
         </div>
         <p className="mt-4 text-xs leading-6 text-muted">
-          Requires SEC_USER_AGENT in backend/.env. Sync checks SEC at most once every six hours per
-          company. The independent SEC worker refreshes expired reports when configured.
+          {PUBLIC_READ_ONLY
+            ? "Published reports are refreshed on the administrator's schedule. Check filing dates and the latest refresh status."
+            : "Requires SEC_USER_AGENT in backend/.env. Sync checks SEC at most once every six hours per company."}
         </p>
         {loading && (
           <p className="mt-4 text-xs text-muted" role="status">
