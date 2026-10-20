@@ -1,5 +1,16 @@
 # Signal — Forecast Research Lab
 
+## Free scheduled deployment
+
+For GitHub Actions + Vercel without a continuously running backend, follow
+[FREE-DEPLOYMENT.md](FREE-DEPLOYMENT.md). The public site reads normalized snapshots
+updated every six hours; provider secrets stay in GitHub Actions. Snapshot mode
+requires a public repository and preserves the last successful data on provider failures.
+Local development still uses the Python server and SQLite.
+
+Changes are developed on `feature/v2`; merge into the default branch before enabling
+the scheduled workflow. `backup/v1` preserves the previous version.
+
 A local research workspace for exploring financial time series, running forecasting experiments, and comparing models against a simple baseline.
 
 The frontend uses Next.js, React and TypeScript. The Python backend handles CSV ingestion, validation, forecasting, backtesting and SQLite persistence. This MVP establishes a workflow for developing forecasting AI; its current models are a naive baseline and log-linear regression, not deep-learning models.
@@ -49,7 +60,7 @@ Expected startup message:
 Research API: http://localhost:8000
 ```
 
-The backend uses the Python standard library; no pip installation is required. On first startup it creates the SQLite database and seed data.
+Install backend dependencies with `python -m pip install -r backend/requirements.txt`. On first startup it creates the SQLite database and seed data.
 
 ### 2. Start the frontend
 

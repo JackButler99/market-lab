@@ -426,7 +426,7 @@ export default function Page() {
               className="mb-4 rounded-lg border border-accent/30 bg-accent/5 p-4 text-xs leading-6 text-muted"
             >
               Demo publik read-only. Grafik, sumber, insight dan hasil tersimpan dapat dibaca.
-              Sinkronisasi berjalan otomatis di backend; import, sync manual dan eksperimen baru
+              Sinkronisasi berjalan otomatis sesuai konfigurasi deployment; import, sync manual dan eksperimen baru
               tersedia di lingkungan admin/lokal.
             </div>
           )}

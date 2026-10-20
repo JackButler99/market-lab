@@ -1,5 +1,8 @@
 # Deployment Render + Vercel
 
+Untuk versi gratis dengan pembaruan terjadwal tanpa server selalu aktif, gunakan
+[FREE-DEPLOYMENT.md](FREE-DEPLOYMENT.md). Panduan Render di bawah adalah opsi berbayar.
+
 Requires all prior patches through signal-fundamental-visuals.patch.
 Public production UI is read-only. Local npm run dev retains manual actions.
 

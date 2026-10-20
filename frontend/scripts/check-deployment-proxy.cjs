@@ -4,6 +4,11 @@ const assert = require("node:assert/strict"),
   path = require("node:path"),
   Module = require("node:module"),
   ts = require("typescript");
+require.extensions[".ts"] = (mod, filename) => mod._compile(
+  ts.transpileModule(fs.readFileSync(filename, "utf8"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText, filename,
+);
 const filename = path.resolve(__dirname, "../app/api/proxy.ts");
 const m = new Module(filename, module);
 m.filename = filename;

@@ -5,6 +5,9 @@ import { useEffect, useState } from "react";
 import { Pill } from "./ui";
 
 type Status = {
+  mode?: string;
+  generated_at?: string;
+  snapshot_stale?: boolean;
   enabled: boolean;
   worker_running: boolean;
   next_check: string | null;
@@ -49,9 +52,16 @@ export default function FundamentalAutomation({ symbol }: { symbol: string }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="mr-auto text-sm font-medium">Fundamental evidence automation</h3>
-        <Pill>{status?.worker_running ? "Worker running" : "Worker stopped"}</Pill>
+        <Pill>{status?.mode === "scheduled_snapshot" ? "Scheduled snapshots" : status?.worker_running ? "Worker running" : "Worker stopped"}</Pill>
         <Pill>Reports {status?.enabled ? "ON" : "OFF"}</Pill>
       </div>
+      {status?.mode === "scheduled_snapshot" && (
+        <p role="status" className="mt-3 text-xs leading-6 text-muted">
+          Pembaruan terjadwal setiap enam jam melalui GitHub Actions; jadwal dapat terlambat.
+          Snapshot dibuat: {status.generated_at ? new Date(status.generated_at).toLocaleString() : "—"}.
+          {status.snapshot_stale && <span className="text-orange-200"> Snapshot lebih dari 12 jam; periksa workflow. Tanggal observasi di bawah tetap menjadi acuan.</span>}
+        </p>
+      )}
       {error && (
         <p role="status" className="mt-3 text-xs text-orange-200">
           {error}
@@ -64,7 +74,7 @@ export default function FundamentalAutomation({ symbol }: { symbol: string }) {
             {state.message}
           </p>
           <p className="mt-2 text-xs text-muted">
-            Next permitted evidence check:{" "}
+            {status?.mode === "scheduled_snapshot" ? "Next attempt: next workflow run" : "Next permitted evidence check:"}{" "}
             {state.next_attempt
               ? new Date(state.next_attempt).toLocaleString()
               : "Next worker cycle"}
@@ -72,11 +82,11 @@ export default function FundamentalAutomation({ symbol }: { symbol: string }) {
         </>
       )}
       {status?.last_error && <p className="mt-2 text-xs text-orange-200">{status.last_error}</p>}
-      <p className="mt-3 text-xs leading-6 text-muted">
+      {status?.mode !== "scheduled_snapshot" && <p className="mt-3 text-xs leading-6 text-muted">
         Independent of the price worker. Six-hour cache · 30-minute retries · up to six automatic
         attempts per asset per UTC day. Configure AUTO_FUNDAMENTALS_ENABLED in backend/.env and
         restart. Keep the backend running; browser polling only reads local data.
-      </p>
+      </p>}
     </section>
   );
 }
