@@ -33,6 +33,10 @@ type Run = {
 };
 type Point = { date: string; close: number };
 type Result = {
+  model?: string;
+  symbol?: string;
+  horizon?: number;
+  created?: string;
   origin?: "manual" | "automatic";
   dataset_id: string;
   model_version: string;
@@ -144,7 +148,9 @@ export default function Page() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [symbol, setSymbol] = useState("AAPL");
   const [points, setPoints] = useState<Point[]>([]);
-  const [result, setResult] = useState<Result | null>(null);
+  const [experimentView, setExperimentView] = useState<{
+    key: string; result: Result; compared: Result[]; completedAt: string;
+  } | null>(null);
   const [model, setModel] = useState("trend");
   const [horizon, setHorizon] = useState(7);
   const [busy, setBusy] = useState(false);
@@ -154,14 +160,12 @@ export default function Page() {
   const [replayDatasetId, setReplayDatasetId] = useState<string | null>(null);
   const asset = assets.find((a) => a.symbol === symbol);
   const datasetId = replayDatasetId || asset?.dataset_id;
-  const autoRunId = runs.find(
-    (r) =>
-      r.origin === "automatic" &&
-      r.symbol === symbol &&
-      r.dataset_id === datasetId &&
-      r.model === model &&
-      r.horizon === horizon,
-  )?.id;
+  const selectionKey = JSON.stringify([symbol, datasetId, model, horizon]);
+  const result = experimentView?.key === selectionKey ? experimentView.result : null;
+  const compared = result ? experimentView?.compared || [] : [];
+  function setResult(value: Result | null) {
+    setExperimentView(value ? { key: selectionKey, result: value, compared: [], completedAt: new Date().toISOString() } : null);
+  }
   async function refresh() {
     try {
       const d = await request("/api/dashboard");
@@ -203,7 +207,6 @@ export default function Page() {
   }, []);
   useEffect(() => {
     let active = true;
-    setResult(null);
     setPoints([]);
     if (datasetId)
       request("/api/datasets?id=" + encodeURIComponent(datasetId))
@@ -217,23 +220,9 @@ export default function Page() {
       active = false;
     };
   }, [symbol, datasetId]);
-  useEffect(() => {
-    let active = true;
-    if (datasetId)
-      request(
-        `/api/forecast?symbol=${symbol}&dataset_id=${datasetId}&model=${model}&horizon=${horizon}`,
-      )
-        .then((d) => {
-          if (active && d) setResult(d);
-        })
-        .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [symbol, datasetId, model, horizon, autoRunId]);
   async function run() {
     setBusy(true);
-    setError("");
+    setError(""); setNotice(""); setExperimentView(null);
     try {
       setResult(await request("/api/experiments", { symbol, model, horizon, dataset_id: datasetId }));
       await refresh();
@@ -243,6 +232,19 @@ export default function Page() {
     } finally {
       setBusy(false);
     }
+  }
+  async function compareModels() {
+    if (!datasetId || busy) return;
+    setBusy(true); setError(""); setNotice(""); setExperimentView(null);
+    try {
+      const trend = await request("/api/experiments", { symbol, model: "trend", horizon, dataset_id: datasetId });
+      const naive = await request("/api/experiments", { symbol, model: "naive", horizon, dataset_id: datasetId });
+      setExperimentView({ key: selectionKey, result: model === "trend" ? trend : naive,
+        compared: [trend, naive], completedAt: new Date().toISOString() });
+      await refresh();
+      setNotice("Both models evaluated on the same dataset and horizon. Lower historical MAE does not guarantee better future forecasts.");
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
   async function syncMarket() {
     setBusy(true);
@@ -275,7 +277,10 @@ export default function Page() {
       await refresh();
       if (PUBLIC_READ_ONLY) {
         setSymbol(saved.symbol); setModel(saved.model); setHorizon(saved.horizon);
-        setReplayDatasetId(saved.dataset_id); setResult(d); setTab("Overview");
+        setReplayDatasetId(saved.dataset_id);
+        setExperimentView({ key: JSON.stringify([saved.symbol, saved.dataset_id, saved.model, saved.horizon]),
+          result: d, compared: [], completedAt: new Date().toISOString() });
+        setTab("Overview");
       }
       setNotice(
         `Replay saved as ${runLabel(d.id)}. MAE ${money(d.mae)} · original ${money(saved.mae)}. Dataset ${d.dataset_id.slice(0, 12)}.`,
@@ -491,7 +496,7 @@ export default function Page() {
                     asset={a}
                     selected={symbol === a.symbol}
                     disabled={busy}
-                    onSelect={() => { setReplayDatasetId(null); setSymbol(a.symbol); }}
+                    onSelect={() => { setResult(null); setNotice(""); setReplayDatasetId(null); setSymbol(a.symbol); }}
                   />
                 ))}
               </div>
@@ -528,10 +533,10 @@ export default function Page() {
                   <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-[9px] text-muted">
                     <span className="ml-3.5 size-1.5 rounded-full bg-accent" />
                     Historical close
-                    <span className="ml-3.5 size-1.5 rounded-full bg-forecast" />
-                    Model forecast
-                    <span className="ml-3.5 size-[9px] bg-[#434b6d]" />
-                    Residual band
+                    {result && <>
+                      <span className="ml-3.5 size-1.5 rounded-full bg-forecast" />Model forecast
+                      <span className="ml-3.5 size-[9px] bg-[#434b6d]" />Residual band
+                    </>}
                   </div>
                 </Panel>
                 <Panel data-tour="builder">
@@ -550,7 +555,7 @@ export default function Page() {
                       value={model}
                       onChange={(e) => {
                         setModel(e.target.value);
-                        setResult(null);
+                        setNotice(""); setResult(null);
                       }}
                     >
                       <option value="trend">Rolling log-linear trend</option>
@@ -565,7 +570,7 @@ export default function Page() {
                       value={horizon}
                       onChange={(e) => {
                         setHorizon(+e.target.value);
-                        setResult(null);
+                        setNotice(""); setResult(null);
                       }}
                     >
                       {[1, 7, 14, 30].map((n) => (
@@ -595,7 +600,7 @@ export default function Page() {
                     disabled={busy || !points.length || !datasetId}
                     onClick={run}
                   >
-                    {busy ? "Processing…" : "Run experiment"}
+                    {busy ? "Processing…" : result ? "Run again" : "Run experiment"}
                     <span
                       className="
                         transition-transform group-hover:translate-x-0.5
@@ -606,11 +611,33 @@ export default function Page() {
                       ↗
                     </span>
                   </Button>
+                  <Button className="mt-3 w-full justify-center" disabled={busy || !points.length || !datasetId} onClick={compareModels}>
+                    Compare models
+                  </Button>
+                  <p role="status" aria-live="polite" className="mt-4 text-xs leading-6 text-muted">
+                    {busy ? "Processing your request…" : result
+                      ? `Completed ${new Date(experimentView!.completedAt).toLocaleString()} · ${model} · ${horizon} observations · dataset ${result.dataset_id.slice(0, 12)}`
+                      : "Historical prices only. Choose your settings, then run an experiment to reveal the forecast and evaluation."}
+                  </p>
                   <small className="mt-3 block text-center text-[9px] text-muted">
                     CPU only · Results saved locally
                   </small>
                 </Panel>
               </div>
+              {compared.length === 2 && (
+                <Panel className="mt-5">
+                  <h2 className="text-base font-medium">Model comparison</h2>
+                  <p className="mt-2 text-xs text-muted">Same dataset, horizon and walk-forward origins. The chart shows the model selected above.</p>
+                  <div className="mt-4 overflow-auto">
+                    <table className={tableClass}>
+                      <thead><tr><th>MODEL</th><th>MAE</th><th>BASELINE MAE</th><th>SAMPLES</th></tr></thead>
+                      <tbody>{compared.map(r => <tr key={r.model}>
+                        <td>{r.model}</td><td>{money(r.mae)}</td><td>{money(r.baseline_mae)}</td><td>{r.samples}</td>
+                      </tr>)}</tbody>
+                    </table>
+                  </div>
+                </Panel>
+              )}
               <div
                 data-tour="metrics"
                 className="mt-5 grid grid-cols-4 gap-[15px] max-[1150px]:grid-cols-2"
@@ -765,7 +792,7 @@ export default function Page() {
                     className={selectClass}
                     disabled={busy}
                     value={symbol}
-                    onChange={(e) => { setReplayDatasetId(null); setSymbol(e.target.value); }}
+                    onChange={(e) => { setResult(null); setNotice(""); setReplayDatasetId(null); setSymbol(e.target.value); }}
                   >
                     {["AAPL", "MSFT", "EURUSD", "BTCUSD"].map((s) => (
                       <option key={s}>{s}</option>
