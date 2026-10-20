@@ -1,3 +1,4 @@
+import { snapshotRead } from "./snapshot";
 // Server-only by import graph: route.ts imports this; client components never do.
 const ALLOWED = new Set([
   "dashboard",
@@ -33,6 +34,7 @@ export function denyWrite() {
   );
 }
 export async function proxyRead(request: Request, segments: string[]) {
+  if (process.env.DEPLOYMENT_MODE === "snapshot") return snapshotRead(request, segments);
   const route = segments.join("/");
   if (!ALLOWED.has(route)) return json({ error: "API route not available" }, 404);
   const configured = process.env.BACKEND_URL || "";

@@ -14,6 +14,9 @@ type State = {
   forecast_id: number | null;
 };
 type Status = {
+  mode?: string;
+  generated_at?: string;
+  snapshot_stale?: boolean;
   sync_enabled: boolean;
   forecast_enabled: boolean;
   worker_running: boolean;
@@ -58,10 +61,17 @@ export default function AutomationStatus({ symbol }: { symbol: string }) {
     >
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="mr-auto text-sm font-medium">Backend automation</h3>
-        <Pill>{status?.worker_running ? "Worker running" : "Worker stopped"}</Pill>
+        <Pill>{status?.mode === "scheduled_snapshot" ? "Scheduled snapshots" : status?.worker_running ? "Worker running" : "Worker stopped"}</Pill>
         <Pill>Sync {status?.sync_enabled ? "ON" : "OFF"}</Pill>
         <Pill>Forecast {status?.forecast_enabled ? "ON" : "OFF"}</Pill>
       </div>
+      {status?.mode === "scheduled_snapshot" && (
+        <p role="status" className="mt-3 text-xs leading-6 text-muted">
+          Pembaruan terjadwal setiap enam jam melalui GitHub Actions; jadwal dapat terlambat.
+          Snapshot dibuat: {status.generated_at ? new Date(status.generated_at).toLocaleString() : "—"}.
+          {status.snapshot_stale && <span className="text-orange-200"> Snapshot lebih dari 12 jam; periksa workflow. Tanggal observasi di bawah tetap menjadi acuan.</span>}
+        </p>
+      )}
       {error && (
         <p role="status" className="mt-2 text-xs text-[#f0b47a]">
           {error}
@@ -71,7 +81,7 @@ export default function AutomationStatus({ symbol }: { symbol: string }) {
         <>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-[11px] max-[650px]:grid-cols-1">
             <div>
-              <dt className="text-muted">Next local check</dt>
+              <dt className="text-muted">{status.mode === "scheduled_snapshot" ? "Next check: scheduled workflow" : "Next local check"}</dt>
               <dd className="mt-1">{date(status.next_check)}</dd>
             </div>
             <div>
@@ -105,10 +115,10 @@ export default function AutomationStatus({ symbol }: { symbol: string }) {
       {["AAPL", "MSFT", "EURUSD", "BTCUSD"].includes(symbol) && (
         <FundamentalAutomation symbol={symbol} />
       )}
-      <p className="mt-3 text-[11px] leading-6 text-muted">
+      {status?.mode !== "scheduled_snapshot" && <p className="mt-3 text-[11px] leading-6 text-muted">
         Requires the Python backend to stay running. Browser polling reads local status only; it
         does not consume provider requests. Times use your browser timezone.
-      </p>
+      </p>}
     </section>
   );
 }
