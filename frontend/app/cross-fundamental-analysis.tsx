@@ -120,7 +120,7 @@ export default function CrossFundamentalAnalysis({ symbol }: { symbol: "EURUSD" 
             </h2>
             <p className="mt-3 max-w-3xl text-xs leading-6 text-muted">
               {symbol === "EURUSD"
-                ? "Federal Reserve and BLS observations via FRED, Eurostat HICP via FRED, and ECB deposit facility data. Configure FRED_API_KEY in backend/.env, then restart."
+                ? "Federal Reserve and BLS observations via FRED, Eurostat HICP via FRED, and ECB deposit facility data. Provider credentials are configured by the administrator."
                 : "Hash rate, mining difficulty, confirmed transactions and issued supply from Blockchain.com. No API key is required by this connector. Current incomplete UTC day is excluded."}
             </p>
           </div>
@@ -134,8 +134,10 @@ export default function CrossFundamentalAnalysis({ symbol }: { symbol: "EURUSD" 
               : "Sync fundamentals"}
         </Button>
         <p className="mt-3 text-xs leading-6 text-muted">
-          Six-hour cache · shared 45-second sync cooldown · automatic refresh while the Python
-          backend runs. This is research context; it does not change the forecasting model.
+          {PUBLIC_READ_ONLY
+            ? "Scheduled updates are managed by the administrator. Observation dates show provider freshness; publication time can differ."
+            : "Six-hour cache · shared 45-second sync cooldown · automatic refresh while the Python backend runs."}
+          {" "}This is research context; it does not change the forecasting model.
         </p>
         {loading && (
           <p role="status" className="mt-4 text-xs text-muted">
@@ -154,12 +156,12 @@ export default function CrossFundamentalAnalysis({ symbol }: { symbol: "EURUSD" 
         )}
         {!loading && !data?.has_data && (
           <p className="mt-4 text-xs text-muted">
-            No observations stored yet. Sync now or wait for the configured worker.
+            {PUBLIC_READ_ONLY ? "No published observations yet. The administrator should check the latest refresh workflow and provider diagnostics." : "No observations stored yet. Sync now or wait for the configured worker."}
           </p>
         )}
         {data?.last_job?.status === "failed" && (
           <p className="mt-4 text-xs text-orange-200">
-            Last sync failed; any analysis below is the last successful snapshot.
+            Last sync failed; any analysis below is the last successful snapshot. {data?.last_job?.message}
           </p>
         )}
       </Panel>
