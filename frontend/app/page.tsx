@@ -1,5 +1,6 @@
 "use client";
 import { API_BASE, PUBLIC_READ_ONLY } from "./api-base";
+import { browserDemoRequest } from "./browser-demo";
 import { useEffect, useState } from "react";
 import FundamentalAnalysis from "./research-fundamentals";
 import ResearchTutorial from "./research-tutorial";
@@ -18,6 +19,7 @@ type Asset = DatasetAsset & {
   observations: number;
 };
 type Run = {
+  execution?: string;
   origin: "manual" | "automatic";
   dataset_id: string | null;
   model_version: string | null;
@@ -44,10 +46,10 @@ type Result = {
   backtest: { date: string; actual: number; predicted: number }[];
 };
 const API = API_BASE;
+const runLabel = (id: number) => id < 0 ? "B-" + String(Math.abs(id)).slice(-8) : "EXP-" + String(id).padStart(3, "0");
 const money = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: v < 10 ? 5 : 2 });
 async function request(path: string, body?: object) {
-  if (body && PUBLIC_READ_ONLY)
-    throw Error("Demo publik read-only; backend automation memperbarui data.");
+  if (PUBLIC_READ_ONLY) return browserDemoRequest(path, body as Record<string, unknown> | undefined);
   const r = await fetch(
     API + path,
     body
@@ -149,8 +151,9 @@ export default function Page() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [online, setOnline] = useState(false);
+  const [replayDatasetId, setReplayDatasetId] = useState<string | null>(null);
   const asset = assets.find((a) => a.symbol === symbol);
-  const datasetId = asset?.dataset_id;
+  const datasetId = replayDatasetId || asset?.dataset_id;
   const autoRunId = runs.find(
     (r) =>
       r.origin === "automatic" &&
@@ -232,9 +235,9 @@ export default function Page() {
     setBusy(true);
     setError("");
     try {
-      setResult(await request("/api/experiments", { symbol, model, horizon }));
+      setResult(await request("/api/experiments", { symbol, model, horizon, dataset_id: datasetId }));
       await refresh();
-      setNotice("Experiment saved. Compare out-of-sample performance below.");
+      setNotice(PUBLIC_READ_ONLY ? "Experiment calculated in your browser and saved on this device. Compare the walk-forward results below." : "Experiment saved. Compare out-of-sample performance below.");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -270,8 +273,12 @@ export default function Page() {
         dataset_id: saved.dataset_id,
       });
       await refresh();
+      if (PUBLIC_READ_ONLY) {
+        setSymbol(saved.symbol); setModel(saved.model); setHorizon(saved.horizon);
+        setReplayDatasetId(saved.dataset_id); setResult(d); setTab("Overview");
+      }
       setNotice(
-        `Replay saved as EXP-${d.id}. MAE ${money(d.mae)} · original ${money(saved.mae)}. Dataset ${d.dataset_id.slice(0, 12)}.`,
+        `Replay saved as ${runLabel(d.id)}. MAE ${money(d.mae)} · original ${money(saved.mae)}. Dataset ${d.dataset_id.slice(0, 12)}.`,
       );
     } catch (e) {
       setError((e as Error).message);
@@ -283,16 +290,29 @@ export default function Page() {
     setBusy(true);
     setError("");
     try {
+      if (file.size > 2_000_000) throw Error("CSV exceeds 2 MB.");
       const d = await request("/api/import", { symbol, csv: await file.text() });
+      setReplayDatasetId(null);
       await refresh();
       setPoints(await request("/api/prices?symbol=" + symbol));
       setResult(null);
-      setNotice(`${d.rows} observations imported for ${symbol}. Previous series replaced.`);
+      setNotice(`${d.rows} observations imported for ${symbol}. ${PUBLIC_READ_ONLY ? "Saved only in this browser; published data is unchanged. Forecast date labels use calendar days." : "Previous series replaced."}`);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
+  }
+  async function resetDemo(clear = false) {
+    setBusy(true); setError("");
+    try {
+      await request(clear ? "/api/demo/clear" : "/api/demo/restore", { symbol });
+      setReplayDatasetId(null); setResult(null);
+      await refresh();
+      if (datasetId) setPoints(await request("/api/prices?symbol=" + symbol));
+      setNotice(clear ? "Browser demo data cleared. Published data is unchanged." : "Using the published dataset. Saved browser experiments remain available.");
+    } catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
   }
   return (
     <div
@@ -351,7 +371,7 @@ export default function Page() {
         <div className="mt-auto text-xs text-[#c0c9d0] max-[650px]:hidden">
           <span className="mr-2 inline-block size-[7px] rounded-full bg-accent" />
           Local environment
-          <p className="my-3 text-[11px] text-[#75838e]">Python pipeline · SQLite</p>
+          <p className="my-3 text-[11px] text-[#75838e]">{PUBLIC_READ_ONLY ? "Browser experiments · Scheduled data" : "Python pipeline · SQLite"}</p>
           <div className="mt-6 flex gap-3 border-t border-line pt-[22px]">
             JB{" "}
             <span className="text-[11px]">
@@ -381,7 +401,7 @@ export default function Page() {
             <span
               className={`text-[11px] max-[650px]:text-[9px] ${online ? "text-[#b8e495]" : "text-[#f0b47a]"}`}
             >
-              {online ? "● API connected" : "○ API offline"}
+              {online ? (PUBLIC_READ_ONLY ? "● Demo data ready" : "● API connected") : "○ Data unavailable"}
             </span>
             <span className="rounded-full border border-[#3b4751] p-2.5 text-[#d5dce2]">JB</span>
           </div>
@@ -425,9 +445,13 @@ export default function Page() {
               role="status"
               className="mb-4 rounded-lg border border-accent/30 bg-accent/5 p-4 text-xs leading-6 text-muted"
             >
-              Demo publik read-only. Grafik, sumber, insight dan hasil tersimpan dapat dibaca.
-              Sinkronisasi berjalan otomatis sesuai konfigurasi deployment; import, sync manual dan eksperimen baru
-              tersedia di lingkungan admin/lokal.
+              Interactive demo · Experiments run in your browser. CSV files stay on this device;
+              up to 20 experiments are saved in browser storage. Market snapshots refresh on the administrator's schedule.
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button compact disabled={busy} onClick={() => resetDemo()}>Use published data</Button>
+                <Button compact disabled={busy} onClick={() => resetDemo(true)}>Clear browser demo data</Button>
+              </div>
+              {replayDatasetId && <p className="mt-2">Viewing a saved dataset. Choose “Use published data” to return to the current snapshot.</p>}
             </div>
           )}
           {notice && (
@@ -449,7 +473,7 @@ export default function Page() {
               ◎ RESEARCH MODE
             </span>
             {asset?.source === "alphavantage"
-              ? "Stored API daily closes selected. Check the as-of date; backend automation checks for updates while Python is running."
+              ? (PUBLIC_READ_ONLY ? "Published daily closes selected. Check the observation date; experiments run in your browser." : "Stored API daily closes selected. Check the as-of date; backend automation checks for updates while Python is running.")
               : asset?.source === "csv-import"
                 ? "User-imported CSV selected. Provider, adjustment and frequency are unspecified."
                 : "Synthetic examples selected. Sync AAPL/MSFT/EURUSD/BTCUSD or import CSV for real observations."}
@@ -467,7 +491,7 @@ export default function Page() {
                     asset={a}
                     selected={symbol === a.symbol}
                     disabled={busy}
-                    onSelect={() => setSymbol(a.symbol)}
+                    onSelect={() => { setReplayDatasetId(null); setSymbol(a.symbol); }}
                   />
                 ))}
               </div>
@@ -568,7 +592,7 @@ export default function Page() {
                     data-tour="run"
                     variant="primary"
                     className="group mt-6 w-full justify-between py-3"
-                    disabled={PUBLIC_READ_ONLY || busy || !online || !points.length}
+                    disabled={busy || !points.length || !datasetId}
                     onClick={run}
                   >
                     {busy ? "Processing…" : "Run experiment"}
@@ -660,7 +684,7 @@ export default function Page() {
                   <tbody>
                     {runs.map((r) => (
                       <tr key={r.id}>
-                        <td>EXP-{String(r.id).padStart(3, "0")}</td>
+                        <td>{runLabel(r.id)}</td>
                         <td>{r.symbol}</td>
                         <td>{r.model}</td>
                         <td>{r.horizon}</td>
@@ -674,12 +698,12 @@ export default function Page() {
                           </small>
                         </td>
                         <td>
-                          <Pill>{r.origin || "manual"}</Pill>
+                          <Pill>{r.execution === "browser" ? "This browser" : r.origin || "manual"}</Pill>
                         </td>
                         <td>
                           <Button
                             compact
-                            disabled={PUBLIC_READ_ONLY || busy || !r.dataset_id}
+                            disabled={busy || !r.dataset_id}
                             onClick={() => replay(r)}
                           >
                             Replay
@@ -715,7 +739,7 @@ export default function Page() {
                       Local, manual ingestion · validated before replacement
                     </p>
                   </div>
-                  <Pill>SQLite persistence</Pill>
+                  <Pill>{PUBLIC_READ_ONLY ? "Browser storage" : "SQLite persistence"}</Pill>
                 </div>
                 <div className="my-8 grid grid-cols-4 gap-[15px] max-[1150px]:grid-cols-2 max-[650px]:grid-cols-1">
                   {[
@@ -741,7 +765,7 @@ export default function Page() {
                     className={selectClass}
                     disabled={busy}
                     value={symbol}
-                    onChange={(e) => setSymbol(e.target.value)}
+                    onChange={(e) => { setReplayDatasetId(null); setSymbol(e.target.value); }}
                   >
                     {["AAPL", "MSFT", "EURUSD", "BTCUSD"].map((s) => (
                       <option key={s}>{s}</option>
@@ -757,7 +781,7 @@ export default function Page() {
                 >
                   ↑ <b>Import a price series for {symbol}</b>
                   <span className="text-center text-[11px] text-muted">
-                    CSV with date,close · at least 100 unique dates · max 2 MB
+                    CSV with date,close · 100–10,000 rows in browser demo · max 2 MB
                   </span>
                   <input
                     className="
@@ -766,7 +790,7 @@ export default function Page() {
                       file:text-ink focus-visible:outline-2 focus-visible:outline-accent
                     "
                     aria-label="Import CSV"
-                    disabled={PUBLIC_READ_ONLY || busy}
+                    disabled={busy}
                     type="file"
                     accept=".csv,text/csv"
                     onChange={(e) => {
@@ -779,8 +803,7 @@ export default function Page() {
                 <p className="text-[10px] leading-5 text-muted">
                   Import replaces the selected asset’s entire series after validation. Use ISO dates
                   (YYYY-MM-DD), positive closes, and a consistent observation frequency.
-                  AAPL/MSFT/EURUSD/BTCUSD support API sync and backend automation. Report scraping
-                  remains planned.
+                  {PUBLIC_READ_ONLY ? "CSV imports stay on this device, use calendar-day forecast labels, and do not change published prices or fundamentals." : "AAPL/MSFT/EURUSD/BTCUSD support API sync and backend automation."}
                 </p>
               </Panel>
               <Panel className="mt-5">
